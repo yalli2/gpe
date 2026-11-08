@@ -28,6 +28,7 @@
       <a class="brand" href="#/map"><span class="logo" aria-hidden="true">${logo()}</span><span><b>${esc(M.name)}</b><small>${esc(M.nameEn)} · GPE</small></span></a>
       <nav class="nav">
         <a href="#/map" class="${active === 'map' ? 'on' : ''}">챕터 지도</a>
+        <a href="#/visuals" class="${active === 'visuals' ? 'on' : ''}">도표 모음</a>
         <a href="#/compass" class="${active === 'compass' ? 'on' : ''}">GPE 나침반</a>
         <a href="#/room" class="${active === 'room' ? 'on' : ''}">진행 현황</a>
       </nav>
@@ -134,7 +135,7 @@
       <section class="brief">
         <div class="thesis"><h2>핵심 주장</h2><p>${esc(c.thesis)}</p><ul>${(c.points || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
         <div class="concepts"><h2>핵심 개념</h2>${(c.concepts || []).map(k => `<details><summary>${esc(k.t)}</summary><p>${esc(k.d)}</p></details>`).join('')}</div>
-        ${(c.visuals || []).length ? `<div class="visuals"><h2>교재 속 도표</h2>${c.visuals.map(v => `<div class="vis"><span class="ref">${esc(v.ref)}</span><div><b>${esc(v.title)}</b><small>${esc(v.note || '')}</small>${figActs[v.ref] ? `<a href="#act-${figActs[v.ref].id}" class="tolink">→ 실습 「${esc(figActs[v.ref].title)}」에서 재현</a>` : ''}</div></div>`).join('')}</div>` : ''}
+        ${visualsBlock(c, figActs)}
       </section>
       <h2 class="sect">실습 <small>입력하면 자동 저장되고, 오른쪽 결과가 실시간으로 갱신됩니다</small></h2>
       <div id="acts"></div>
@@ -142,6 +143,7 @@
       <nav class="pager">${prev ? `<a href="#/ch/${prev.n}">← ${chLabel(prev)} ${esc(prev.ko)}</a>` : '<span></span>'}${next ? `<a href="#/ch/${next.n}">${chLabel(next)} ${esc(next.ko)} →</a>` : '<a href="#/compass">GPE 나침반 보기 →</a>'}</nav>
     </main>`;
     bindHeader();
+    if (window.RV) { RV.hydrate(app); const ra = $('#rvAll'); if (ra) ra.onclick = () => { const ds = app.querySelectorAll('details.rv'); const open = ![...ds].every(d => d.open); ds.forEach(d => d.open = open); ra.textContent = open ? '모두 접기' : '모두 펼치기'; }; }
     const box = $('#acts');
     (c.activities || []).forEach((a, i) => {
       const el = document.createElement('article'); el.className = 'act'; el.id = 'act-' + a.id;
@@ -153,6 +155,13 @@
       el.querySelector('.zoom').onclick = () => openZoom(c, a);
     });
     drawResults(c);
+  }
+  function visualsBlock(c, figActs) {
+    const rv = window.RV ? RV.forCh(c.n) : [];
+    const link = ref => figActs[ref] ? `<a href="#act-${figActs[ref].id}" class="tolink">→ 실습 「${esc(figActs[ref].title)}」에서 직접 해보기</a>` : '';
+    if (rv.length) return `<div class="visuals"><div class="vh"><h2>교재 속 도표·표·박스 <small>${rv.length}개 · 요약·재구성</small></h2><button class="btn ghost sm" id="rvAll">모두 펼치기</button></div>${rv.map(v => RV.card(v, { extra: link(v.ref) })).join('')}</div>`;
+    if (!(c.visuals || []).length) return '';
+    return `<div class="visuals"><h2>교재 속 도표</h2>${c.visuals.map(v => `<div class="vis"><span class="ref">${esc(v.ref)}</span><div><b>${esc(v.title)}</b><small>${esc(v.note || '')}</small>${link(v.ref)}</div></div>`).join('')}</div>`;
   }
   function drawInput(c, a, el) {
     const d = S.myData(c.n) || {};
@@ -287,6 +296,40 @@
     }, 220);
   }
 
+  /* ---------- 도표 모음 ---------- */
+  let vf = { part: 'all', kind: 'all', q: '' };
+  function visualsView() {
+    S.focus('all');
+    const list = (window.RV ? RV.all() : []).slice().sort((a, b) => a.ch - b.ch || RV.order(a.ref) - RV.order(b.ref));
+    const cnt = k => list.filter(v => RV.KIND(v.ref) === k).length;
+    app.innerHTML = `${header('visuals')}<main class="wrap">
+      <section class="mhero"><div><p class="eyebrow">교재를 펼치지 않고 바로 찾아보기</p><h1>도표 모음</h1><p class="lead">교재의 그림 ${cnt('fig')}개 · 표 ${cnt('tab')}개 · 박스 ${cnt('box')}개를 한국어로 요약·재구성했습니다. 원문을 그대로 옮긴 것이 아니라 학습용으로 다시 정리한 자료이며, 각 항목에 교재 쪽수를 표시했습니다.</p></div></section>
+      <section class="vfilter">
+        <input id="vq" type="search" placeholder="검색: 헤게모니, 가치사슬, BRICS, 조세…" value="${esc(vf.q)}" aria-label="도표 검색">
+        <div class="seg" id="vk">${[['all', '전체'], ['fig', '그림'], ['tab', '표'], ['box', '박스']].map(([k, l]) => `<button data-k="${k}" class="${vf.kind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <select id="vp" aria-label="파트 선택"><option value="all">모든 파트</option>${M.parts.map(p => `<option value="${p.id}" ${String(vf.part) === String(p.id) ? 'selected' : ''}>${esc(p.no)} ${esc(p.ko)}</option>`).join('')}</select>
+        <button class="btn ghost sm" id="vopen">모두 펼치기</button>
+      </section>
+      <div id="vlist"></div></main>`;
+    bindHeader();
+    const draw = () => {
+      const q = vf.q.trim().toLowerCase();
+      const f = list.filter(v => { const c = chByN(v.ch); if (!c) return false;
+        if (vf.part !== 'all' && String(c.part) !== String(vf.part)) return false;
+        if (vf.kind !== 'all' && RV.KIND(v.ref) !== vf.kind) return false;
+        return !q || JSON.stringify(v).toLowerCase().includes(q) || c.ko.toLowerCase().includes(q); });
+      const groups = []; f.forEach(v => { let g = groups[groups.length - 1]; if (!g || g.n !== v.ch) groups.push(g = { n: v.ch, items: [] }); g.items.push(v); });
+      $('#vlist').innerHTML = f.length ? groups.map(g => { const c = chByN(g.n), p = partOf(c);
+        return `<section class="vgroup" style="--pc:${p.color}"><h2><a href="#/ch/${c.n}"><span>${chLabel(c)}</span> ${esc(c.ko)}</a><small>${esc(c.authors)}</small></h2>${g.items.map(v => RV.card(v, { open: !!q })).join('')}</section>`; }).join('') : '<p class="empty">조건에 맞는 항목이 없습니다.</p>';
+      RV.hydrate($('#vlist'));
+    };
+    let t; $('#vq').oninput = e => { clearTimeout(t); t = setTimeout(() => { vf.q = e.target.value; draw(); }, 200); };
+    $('#vk').onclick = e => { const k = e.target.dataset.k; if (!k) return; vf.kind = k; $('#vk').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === k)); draw(); };
+    $('#vp').onchange = e => { vf.part = e.target.value; draw(); };
+    $('#vopen').onclick = e => { const ds = $('#vlist').querySelectorAll('details.rv'); const open = ![...ds].every(d => d.open); ds.forEach(d => d.open = open); e.target.textContent = open ? '모두 접기' : '모두 펼치기'; };
+    draw();
+  }
+
   /* ---------- 라우터 ---------- */
   function route() {
     closeZoom();
@@ -301,6 +344,7 @@
     if (m) { view = 'ch:' + m[1]; chapterView(+m[1]); }
     else if (h === 'compass') { view = 'compass'; compassView(); }
     else if (h === 'room') { view = 'room'; roomView(); }
+    else if (h.startsWith('visuals')) { view = 'visuals'; visualsView(); }
     else { view = 'map'; mapView(); }
     if (!m) window.scrollTo(0, 0);
   }
@@ -310,7 +354,7 @@
     renderTimer = setTimeout(() => {
       if (!view || view === 'join') return;
       if (view.startsWith('ch:')) { drawResults(chByN(+view.slice(3))); const e = $('.err'); if (S.error && !e) { const hd = $('header.top'); if (hd) hd.insertAdjacentHTML('afterend', `<div class="err">${esc(S.error)}</div>`); } else if (!S.error && e) e.remove(); const s = $('.sess'); if (s) s.innerHTML = `<i></i>${esc(S.room)} · ${userIds().length}명`; }
-      else if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
+      else if (view === 'visuals' || (document.activeElement && document.activeElement.tagName === 'SELECT')) return;
       else { const sig = JSON.stringify(S.state).length + ':' + userIds().length + ':' + (S.error || ''); if (sig === lastSig) return; lastSig = sig; const y = window.scrollY; route(); window.scrollTo(0, y); }
     }, 120);
   });
